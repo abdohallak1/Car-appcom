@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<title>الحلاق لتجارة السيارات الألمانية</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  margin:0;
+  font-family:"Segoe UI",Tahoma;
+  background:#f4f6f8;
+}
+header{
+  background:linear-gradient(135deg,#000,#1a1a1a,#333);
+  color:#fff;
+  padding:20px 30px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  box-shadow:0 4px 15px rgba(0,0,0,.4);
+}
+header h1{margin:0;font-size:22px;}
+header .contact{font-size:14px;}
+button{
+  padding:8px 14px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+  font-weight:600;
+  transition:.25s;
+}
+button:hover{opacity:.85;transform:scale(1.03);}
+.btn-login{background:#0d6efd;color:#fff;}
+.btn-logout{background:#6c757d;color:#fff;display:none;}
+.btn-add{background:#198754;color:#fff;margin:15px;}
+.btn-delete{background:#dc3545;color:#fff;}
+.container{padding:20px;}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+  gap:20px;
+}
+.card{
+  background:#fff;
+  border-radius:14px;
+  box-shadow:0 8px 25px rgba(0,0,0,.12);
+  overflow:hidden;
+  transition:.3s;
+}
+.card:hover{
+  transform:translateY(-6px);
+  box-shadow:0 14px 35px rgba(0,0,0,.2);
+}
+.card img{width:100%;height:180px;object-fit:cover;}
+.card .info{padding:15px;}
+.card h3{margin:0 0 5px}
+.card p{margin:4px 0;font-size:14px}
+.hidden{display:none;}
+form{
+  background:#fff;
+  padding:20px;
+  border-radius:10px;
+  box-shadow:0 4px 10px rgba(0,0,0,.1);
+  margin-bottom:20px;
+}
+input,select{width:100%;padding:8px;margin:6px 0;}
+#loginModal{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.6);display:flex;justify-content:center;align-items:center;z-index:1000;
+}
+#loginForm{
+  background:#fff;padding:25px;border-radius:10px;width:300px;text-align:center;
+  box-shadow:0 8px 25px rgba(0,0,0,.3);
+}
+#loginForm input{width:100%;padding:10px;margin:8px 0;}
+#loginForm button{width:100%;margin-top:10px;}
+.filterBox{
+  display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;
+}
+.filterBox select, .filterBox button{
+  padding:6px;
+  border-radius:5px;
+  border:1px solid #ccc;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div>
+    <h1>الحلاق لتجارة السيارات الألمانية</h1>
+    <div class="contact">📞 0959103074 | 📧 info@alhallakcars.com</div>
+  </div>
+  <div>
+    <button class="btn-login" onclick="showLoginModal()">تسجيل دخول</button>
+    <button class="btn-logout" onclick="logout()">خروج</button>
+  </div>
+</header>
+
+<div class="container">
+
+<button class="btn-add" onclick="toggleForm()">➕ إضافة سيارة</button>
+
+<form id="carForm" class="hidden">
+  <input id="brand" placeholder="الماركة">
+  <input id="model" placeholder="الموديل">
+  <input id="year" type="number" placeholder="سنة الصنع">
+  <input id="price" type="number" placeholder="السعر">
+  <select id="type">
+    <option value="بيع">بيع</option>
+    <option value="إيجار">إيجار</option>
+  </select>
+  <input id="image" placeholder="رابط الصورة (اختياري)">
+  <button type="button" class="btn-add" onclick="addCar()">حفظ</button>
+</form>
+
+<div class="filterBox">
+  <select id="filterBrand"><option value="">كل الماركات</option></select>
+  <select id="filterModel"><option value="">كل الموديلات</option></select>
+  <select id="filterYear"><option value="">كل السنوات</option></select>
+  <select id="filterType"><option value="">بيع/إيجار</option>
+    <option value="بيع">بيع</option><option value="إيجار">إيجار</option>
+  </select>
+  <button onclick="showAllCars()">عرض كل السيارات</button>
+</div>
+
+<div class="grid" id="cars"></div>
+
+</div>
+
+<div id="loginModal">
+  <form id="loginForm">
+    <h3>تسجيل الدخول</h3>
+    <input id="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
+    <button type="button" onclick="login()">دخول</button>
+    <button type="button" onclick="guestLogin()">دخول كزائر</button>
+  </form>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "PUT_YOUR_KEY",
+  authDomain: "PUT_YOUR_DOMAIN",
+  databaseURL: "PUT_YOUR_DB_URL",
+  projectId: "PUT_YOUR_PROJECT_ID",
+  appId: "PUT_YOUR_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
+
+let isAdmin = false;
+let allCars=[];
+
+function showLoginModal(){document.getElementById("loginModal").style.display="flex";}
+
+window.login = () => {
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  signInWithEmailAndPassword(auth,email,password)
+    .then(()=> {
+      alert("تم تسجيل الدخول");
+      document.getElementById("loginModal").style.display="none";
+    })
+    .catch(()=> alert("خطأ"));
+};
+
+window.guestLogin = () => {
+  alert("تم الدخول كزائر");
+  isAdmin=false;
+  document.getElementById("loginModal").style.display="none";
+  loadCars();
+};
+
+window.logout = () => signOut(auth);
+
+onAuthStateChanged(auth,user=>{
+  isAdmin = !!user;
+  document.querySelector(".btn-login").style.display = user?"none":"inline-block";
+  document.querySelector(".btn-logout").style.display = user?"inline-block":"none";
+  document.getElementById("loginModal").style.display = user?"none":"flex";
+  loadCars();
+});
+
+window.toggleForm = () => {document.getElementById("carForm").classList.toggle("hidden");};
+
+window.addCar = () => {
+  const car = {
+    brand: brand.value,
+    model: model.value,
+    year: year.value,
+    price: price.value,
+    type: type.value,
+    image: image.value || "https://i.imgur.com/8YqGZ9G.jpg"
+  };
+  push(ref(db, "cars"), car);
+  carForm.classList.add("hidden");
+  carForm.reset();
+};
+
+function updateFilterOptions(){
+  const brands=[...new Set(allCars.map(c=>c.brand))];
+  const models=[...new Set(allCars.map(c=>c.model))];
+  const years=[...new Set(allCars.map(c=>c.year))];
+  const bSel=document.getElementById("filterBrand");
+  const mSel=document.getElementById("filterModel");
+  const ySel=document.getElementById("filterYear");
+  bSel.innerHTML='<option value="">كل الماركات</option>'+brands.map(b=>`<option value="${b}">${b}</option>`).join('');
+  mSel.innerHTML='<option value="">كل الموديلات</option>'+models.map(m=>`<option value="${m}">${m}</option>`).join('');
+  ySel.innerHTML='<option value="">كل السنوات</option>'+years.map(y=>`<option value="${y}">${y}</option>`).join('');
+}
+
+function showAllCars(){
+  document.getElementById("filterBrand").value="";
+  document.getElementById("filterModel").value="";
+  document.getElementById("filterYear").value="";
+  document.getElementById("filterType").value="";
+  displayCars(allCars);
+}
+
+function displayCars(carsList){
+  const grid=cars;
+  grid.innerHTML="";
+  carsList.forEach(c=>{
+    grid.innerHTML+=`
+    <div class="card">
+      <img src="${c.image}">
+      <div class="info">
+        <h3>${c.brand} ${c.model}</h3>
+        <p>📅 ${c.year}</p>
+        <p>💰 ${c.price}$</p>
+        <p>🚗 ${c.type}</p>
+        ${isAdmin?`<button class="btn-delete" onclick="deleteCar('${c.key}')">حذف</button>`:""}
+      </div>
+    </div>`;
+  });
+}
+
+// تحميل السيارات
+function loadCars(){
+  onValue(ref(db,"cars"),snap=>{
+    allCars=[];
+    snap.forEach(c=>{
+      const car=c.val();
+      car.key=c.key;
+      allCars.push(car);
+    });
+    updateFilterOptions();
+    displayCars(allCars);
+  });
+}
+
+// حذف السيارة
+window.deleteCar=id=>{if(!isAdmin) return;if(confirm("تأكيد الحذف؟")) remove(ref(db,"cars/"+id));};
+
+// فلتر حي مباشر
+["filterBrand","filterModel","filterYear","filterType"].forEach(fid=>{
+  document.getElementById(fid).addEventListener("change",()=>{
+    let fBrand=document.getElementById("filterBrand").value;
+    let fModel=document.getElementById("filterModel").value;
+    let fYear=document.getElementById("filterYear").value;
+    let fType=document.getElementById("filterType").value;
+    let filtered=allCars.filter(c=>
+      (!fBrand||c.brand==fBrand) &&
+      (!fModel||c.model==fModel) &&
+      (!fYear||c.year==fYear) &&
+      (!fType||c.type==fType)
+    );
+    displayCars(filtered);
+  });
+});
+</script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBXb74zSU2zXHXs5dklsRw3YeDZJmoWQhg",
+  authDomain: "car-app-1e764.firebaseapp.com",
+  databaseURL: "https://car-app-1e764-default-rtdb.firebaseio.com",
+  projectId: "car-app-1e764",
+  storageBucket: "car-app-1e764.firebasestorage.app",
+  messagingSenderId: "690409691234",
+  appId: "1:690409691234:web:5444aed103a90a225f193b"
+};const firebaseConfig = {
+  apiKey: "AIzaSyBXb74zSU2zXHXs5dklsRw3YeDZJmoWQhg",
+  authDomain: "car-app-1e764.firebaseapp.com",
+  databaseURL: "https://car-app-1e764-default-rtdb.firebaseio.com",
+  projectId: "car-app-1e764",
+  storageBucket: "car-app-1e764.firebasestorage.app",
+  messagingSenderId: "690409691234",
+  appId: "1:690409691234:web:5444aed103a90a225f193b"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+// تسجيل الدخول
+window.login = () => {
+  const email = prompt("Email:");
+  const password = prompt("Password:");
+  signInWithEmailAndPassword(auth, email, password)
+    .then(() => alert("تم تسجيل الدخول"))
+    .catch(() => alert("فشل تسجيل الدخول"));
+};
+
+// معرفة حالة المستخدم
+window.isAdmin = false;
+onAuthStateChanged(auth, user => {
+  window.isAdmin = !!user;
+});
+</script>
+</body>
+</html>
